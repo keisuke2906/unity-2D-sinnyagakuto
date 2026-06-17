@@ -1,16 +1,34 @@
 using UnityEngine;
 
+[RequireComponent(typeof(Rigidbody2D))]
 public class syuzinkou : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    [SerializeField] float moveSpeed = 5.0f;
+
+    Rigidbody2D rb;
+    Vector2 input;
+
+    void Awake()
     {
-        
+        rb = GetComponent<Rigidbody2D>();
     }
 
-    // Update is called once per frame
     void Update()
     {
         
+        input.x = Input.GetAxisRaw("Horizontal");
+        input.y = Input.GetAxisRaw("Vertical");
+
+        if (input.sqrMagnitude > 1f)
+        {
+            input = input.normalized;
+        }
+    }
+
+    void FixedUpdate()
+    {
+        // 入力方向 × 移動速度 を計算して、キャラクターの「速度」として代入する
+       
+        rb.linearVelocity = input * moveSpeed;
     }
 }
