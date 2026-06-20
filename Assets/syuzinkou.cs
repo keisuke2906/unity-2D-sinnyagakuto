@@ -4,11 +4,12 @@ using UnityEngine;
 public class syuzinkou : MonoBehaviour
 {
     [SerializeField] float moveSpeed = 5.0f;
-    [SerializeField] float grabRange = 1.5f; // 物体を検知する範囲
-    [SerializeField] Transform holdPoint;   // 物体がくっつく位置（空のオブジェクトをプレイヤーの子で作って指定）
+    [SerializeField] float grabRange = 1.5f;
+    [SerializeField] Transform holdPoint;
+
     Rigidbody2D rb;
     Vector2 input;
-    GameObject grabbedObject; // 今持っている物体を入れる変数
+    GameObject grabbedObject;
 
     void Awake()
     {
@@ -16,15 +17,10 @@ public class syuzinkou : MonoBehaviour
     }
 
     void Update()
-    {//inputは方向ごとの配列である？
-        
-        input.x = Input.GetAxisRaw("Horizontal");//横方向の入力を監視する
-        input.y = Input.GetAxisRaw("Vertical");//縦方向の入力を監視する
+    {
+        input.x = Input.GetAxisRaw("Horizontal");
+        input.y = Input.GetAxisRaw("Vertical");
 
-        if (input.sqrMagnitude > 1f)
-        {
-            input = input.normalized;
-        }
         if (Input.GetKeyDown(KeyCode.Space))
         {
             if (grabbedObject == null) TryGrab();
@@ -32,34 +28,71 @@ public class syuzinkou : MonoBehaviour
         }
     }
 
-    void FixedUpdate()
-    {
-        // 入力方向 × 移動速度 を計算して、キャラクターの「速度」として代入する
-       
-        rb.linearVelocity = input * moveSpeed;
-    }
-
     void TryGrab()
     {
-        // 周囲の「Carryable」タグが付いた物体を探す
-        Collider2D hit = Physics2D.OverlapCircle(transform.position, grabRange, LayerMask.GetMask("Default"));
-        if (hit != null && hit.CompareTag("Carryable"))
+        if (holdPoint == null) return;
+
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, grabRange);
+
+        foreach (Collider2D hit in hits)
         {
-            grabbedObject = hit.gameObject;
-            // 親子関係にしてプレイヤーにくっつける
-            grabbedObject.transform.SetParent(holdPoint);
-            grabbedObject.transform.localPosition = Vector3.zero;
-            // 物理演算を停止（重力オフ）
-            grabbedObject.GetComponent<Rigidbody2D>().simulated = false;
+            if (hit.CompareTag("Carryable"))
+            {
+                Rigidbody2D targetRb = hit.GetComponent<Rigidbody2D>();
+                Collider2D targetCollider = hit.GetComponent<Collider2D>();
+
+                if (targetRb != null && targetCollider != null)
+                {
+                    grabbedObject = hit.gameObject;
+
+                    // 【対策①】つかんだ瞬間に、溜まっていた「吹っ飛ぶ勢い（速度）」を完全にゼロにする
+                    targetRb.linearVelocity = Vector2.zero;
+                    targetRb.angularVelocity = 0f;
+                    targetRb.simulated = false;
+
+                    // 【対策②】つかんでいる間は、物の当たり判定を完全にオフにしてすり抜けさせる
+                    targetCollider.enabled = false;
+
+                    // 親子関係にして位置を固定
+                    grabbedObject.transform.SetParent(holdPoint);
+                    grabbedObject.transform.localPosition = Vector3.zero;
+                    grabbedObject.transform.localRotation = Quaternion.identity; // 回転もリセット
+                    break;
+                }
+            }
         }
     }
 
     void Drop()
     {
-        // 物理演算を再開して、親子関係を解除
-        grabbedObject.GetComponent<Rigidbody2D>().simulated = true;
+        if (grabbedObject == null) return;
+
+        Rigidbody2D targetRb = grabbedObject.GetComponent<Rigidbody2D>();
+        Collider2D targetCollider = grabbedObject.GetComponent<Collider2D>();
+
+        if (targetRb != null && targetCollider != null)
+        {
+            // 置くときも、変な勢いが乗らないように速度をリセット
+            targetRb.linearVelocity = Vector2.zero;
+            targetRb.angularVelocity = 0f;
+            targetRb.simulated = true;
+
+            // 【対策②の解除】手放したので、当たり判定を元に戻す
+            targetCollider.enabled = true;
+        }
+
         grabbedObject.transform.SetParent(null);
         grabbedObject = null;
     }
 
+    void FixedUpdate()
+    {
+        rb.linearVelocity = input * moveSpeed;
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(transform.position, grabRange);
+    }
 }
